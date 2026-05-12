@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return isSignedIn() && request.auth.token.email == 'nafisaasoti@gmail.com'; } // Bootstrapped admin
+
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // Helper for validation
+    function isValidService(data) {
+      return data.keys().hasAll(['title', 'price', 'description']) 
+        && data.title is string && data.title.size() < 100
+        && data.price is number
+        && data.description is string;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['name', 'email', 'requirement', 'createdAt'])
+        && data.name is string && data.name.size() < 100
+        && data.email is string && data.email.matches('^.+@.+$')
+        && data.requirement is string && data.requirement.size() < 2000
+        && data.createdAt == request.time;
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAdmin() && isValidService(incoming());
+    }
+
+    match /projects/{projectId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow list, get: if isAdmin();
+      allow create: if isValidMessage(incoming());
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /analytics/{docId} {
+      allow read: if true;
+      allow write: if true; // In a real app, we'd use a server function, but for simple tracking...
+    }
+    
+    // Allow test connection
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
